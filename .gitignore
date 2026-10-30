@@ -8,3 +8,5 @@ node_modules/
 .env
 test-results/
 playwright-report/
+backend-java/target/
+backend-java/app.log
