@@ -27,7 +27,7 @@ public class ApprovalsController extends ApiControllerBase {
     @PostMapping("/{invoiceId}/reject")
     public ResponseEntity<?> reject(@PathVariable String invoiceId, @RequestBody RejectRequest requestBody, HttpServletRequest request) {
         UserSession session = (UserSession) request.getAttribute("session");
-        return handle(() -> approvals.reject(invoiceId, session.username(), requestBody.reason()));
+        return handle(() -> approvals.reject(invoiceId, session.username(), session.role(), requestBody.reason()));
     }
 
     public record RejectRequest(String reason) {

@@ -1,5 +1,6 @@
 package com.example.invoiceapp.service;
 
+import com.example.invoiceapp.auth.Role;
 import com.example.invoiceapp.model.Invoice;
 import com.example.invoiceapp.model.InvoiceStatus;
 import com.example.invoiceapp.repository.InvoiceRepository;
@@ -7,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
 
 @Service
 public class ApprovalService {
@@ -28,6 +30,7 @@ public class ApprovalService {
     }
 
     public Invoice approve(String invoiceId, String approver, String role) {
+        validateApprovalRole(role);
         Invoice invoice = find(invoiceId);
         ensurePending(invoice);
 
@@ -45,6 +48,13 @@ public class ApprovalService {
     }
 
     public Invoice reject(String invoiceId, String approver, String reason) {
+        return reject(invoiceId, approver, null, reason);
+    }
+
+    public Invoice reject(String invoiceId, String approver, String role, String reason) {
+        if (role != null) {
+            validateApprovalRole(role);
+        }
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("A reason is required to reject an invoice.");
         }
@@ -61,7 +71,7 @@ public class ApprovalService {
 
     private Invoice approveHighValueInvoice(Invoice invoice, String approver, String role) {
         if (invoice.getStatus() == InvoiceStatus.PendingApproval) {
-            if ("Director".equals(role)) {
+            if (Role.DIRECTOR.value().equals(role)) {
                 invoice.setFirstApprover(approver);
                 invoice.setApprovalReason("First approval recorded.");
                 invoice.setStatus(InvoiceStatus.PendingSecondApproval);
@@ -75,7 +85,7 @@ public class ApprovalService {
                 throw new IllegalArgumentException("The same user cannot approve the same high-value invoice twice.");
             }
 
-            if (!"Director".equals(role)) {
+            if (!Role.DIRECTOR.value().equals(role)) {
                 throw new IllegalArgumentException("The second approver for an invoice over 500000 must be a Director.");
             }
 
@@ -105,11 +115,11 @@ public class ApprovalService {
         }
 
         BigDecimal amount = invoice.getAmount();
-        if ("Manager".equals(role) && amount.compareTo(BigDecimal.valueOf(50000)) > 0) {
+        if (Role.MANAGER.value().equals(role) && amount.compareTo(BigDecimal.valueOf(50000)) > 0) {
             throw new IllegalArgumentException("Manager approval limit exceeded: invoice amount " + amount + " exceeds the maximum of 50000.");
         }
 
-        if ("Director".equals(role) && amount.compareTo(BigDecimal.valueOf(500000)) > 0) {
+        if (Role.DIRECTOR.value().equals(role) && amount.compareTo(BigDecimal.valueOf(500000)) > 0) {
             throw new IllegalArgumentException("Director approval limit exceeded: invoice amount " + amount + " exceeds the maximum of 500000.");
         }
     }
@@ -123,6 +133,20 @@ public class ApprovalService {
     private static void ensurePendingOrSecondApproval(Invoice invoice) {
         if (invoice.getStatus() != InvoiceStatus.PendingApproval && invoice.getStatus() != InvoiceStatus.PendingSecondApproval) {
             throw new IllegalStateException("Invoice " + invoice.getId() + " is " + invoice.getStatus() + "; only pending invoices can be rejected.");
+        }
+    }
+
+    private void validateApprovalRole(String role) {
+        if (role == null || role.isBlank()) {
+            throw new IllegalArgumentException("A valid approval role is required.");
+        }
+
+        boolean validRole = Arrays.stream(Role.values())
+                .map(Role::value)
+                .anyMatch(role::equals);
+
+        if (!validRole) {
+            throw new IllegalArgumentException("Unsupported approval role: " + role + ".");
         }
     }
 }
