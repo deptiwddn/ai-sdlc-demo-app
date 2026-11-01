@@ -4,7 +4,6 @@ import com.example.invoiceapp.model.Invoice;
 import com.example.invoiceapp.model.InvoiceStatus;
 import com.example.invoiceapp.repository.InvoiceRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -31,11 +30,17 @@ public class ApprovalService {
     public Invoice approve(String invoiceId, String approver, String role) {
         Invoice invoice = find(invoiceId);
         ensurePending(invoice);
-        validateApprovalLimit(invoice, approver, role);
+
+        if (requiresSecondApproval(invoice)) {
+            return approveHighValueInvoice(invoice, approver, role);
+        }
+
+        validateApprovalLimit(invoice, role);
 
         invoice.setStatus(InvoiceStatus.Approved);
         invoice.setDecidedBy(approver);
         invoice.setDecidedAt(Instant.now());
+        invoice.setDecisionNote("Approved by " + approver);
         return repository.save(invoice);
     }
 
@@ -45,7 +50,7 @@ public class ApprovalService {
         }
 
         Invoice invoice = find(invoiceId);
-        ensurePending(invoice);
+        ensurePendingOrSecondApproval(invoice);
 
         invoice.setStatus(InvoiceStatus.Rejected);
         invoice.setDecidedBy(approver);
@@ -54,12 +59,47 @@ public class ApprovalService {
         return repository.save(invoice);
     }
 
+    private Invoice approveHighValueInvoice(Invoice invoice, String approver, String role) {
+        if (invoice.getStatus() == InvoiceStatus.PendingApproval) {
+            if ("Director".equals(role)) {
+                invoice.setFirstApprover(approver);
+                invoice.setApprovalReason("First approval recorded.");
+                invoice.setStatus(InvoiceStatus.PendingSecondApproval);
+                return repository.save(invoice);
+            }
+            throw new IllegalArgumentException("The first approver for an invoice over 500000 must be a Director.");
+        }
+
+        if (invoice.getStatus() == InvoiceStatus.PendingSecondApproval) {
+            if (invoice.getFirstApprover() != null && invoice.getFirstApprover().equals(approver)) {
+                throw new IllegalArgumentException("The same user cannot approve the same high-value invoice twice.");
+            }
+
+            if (!"Director".equals(role)) {
+                throw new IllegalArgumentException("The second approver for an invoice over 500000 must be a Director.");
+            }
+
+            invoice.setSecondApprover(approver);
+            invoice.setStatus(InvoiceStatus.Approved);
+            invoice.setDecidedBy(approver);
+            invoice.setDecidedAt(Instant.now());
+            invoice.setDecisionNote("Approved by second director approver: " + approver);
+            return repository.save(invoice);
+        }
+
+        throw new IllegalStateException("Invoice " + invoice.getId() + " is " + invoice.getStatus() + "; only pending invoices can be decided.");
+    }
+
     private Invoice find(String invoiceId) {
         return repository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice " + invoiceId + " was not found."));
     }
 
-    private void validateApprovalLimit(Invoice invoice, String approver, String role) {
+    private boolean requiresSecondApproval(Invoice invoice) {
+        return invoice.getAmount().compareTo(BigDecimal.valueOf(500000)) > 0;
+    }
+
+    private void validateApprovalLimit(Invoice invoice, String role) {
         if (role == null || role.isBlank()) {
             return;
         }
@@ -75,9 +115,14 @@ public class ApprovalService {
     }
 
     private static void ensurePending(Invoice invoice) {
-        if (invoice.getStatus() != InvoiceStatus.PendingApproval) {
+        if (invoice.getStatus() != InvoiceStatus.PendingApproval && invoice.getStatus() != InvoiceStatus.PendingSecondApproval) {
             throw new IllegalStateException("Invoice " + invoice.getId() + " is " + invoice.getStatus() + "; only pending invoices can be decided.");
         }
     }
-}
 
+    private static void ensurePendingOrSecondApproval(Invoice invoice) {
+        if (invoice.getStatus() != InvoiceStatus.PendingApproval && invoice.getStatus() != InvoiceStatus.PendingSecondApproval) {
+            throw new IllegalStateException("Invoice " + invoice.getId() + " is " + invoice.getStatus() + "; only pending invoices can be rejected.");
+        }
+    }
+}

@@ -117,23 +117,16 @@ class ApprovalServiceTests {
     }
 
     @Test
-    void directorApprovalRejectsInvoiceAboveLimit() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001)));
-
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.approve("INV-1", "demo.director", "Director"));
-
-        assertTrue(ex.getMessage().contains("Director approval limit exceeded"));
-    }
-
-    @Test
-    void directorApprovalAllowsAmountWithinLimit() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(499999)));
+    void directorApprovalRequiresSecondApprovalForAmountAboveLimit() {
+        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
 
         Invoice result = service.approve("INV-1", "demo.director", "Director");
 
-        assertEquals(InvoiceStatus.Approved, result.getStatus());
-        assertEquals("demo.director", result.getDecidedBy());
+        assertEquals(InvoiceStatus.PendingSecondApproval, result.getStatus());
+        assertEquals("demo.director", result.getFirstApprover());
+        assertNull(result.getSecondApprover());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
     }
 
     @Test
@@ -147,17 +140,13 @@ class ApprovalServiceTests {
     }
 
     @Test
-    void directorApprovalRejectsAmountAboveLimitWithoutMutatingState() {
-        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
-        ApprovalService service = serviceFor(invoice);
+    void directorApprovalAllowsAmountWithinLimit() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(499999)));
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.approve("INV-1", "demo.director", "Director"));
+        Invoice result = service.approve("INV-1", "demo.director", "Director");
 
-        assertEquals("Director approval limit exceeded: invoice amount 500001 exceeds the maximum of 500000.", ex.getMessage());
-        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
-        assertNull(invoice.getDecidedBy());
-        assertNull(invoice.getDecidedAt());
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertEquals("demo.director", result.getDecidedBy());
     }
 
     @Test
@@ -189,5 +178,160 @@ class ApprovalServiceTests {
         ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(100)));
 
         assertThrows(IllegalArgumentException.class, () -> service.reject("INV-1", "demo.approver", "  "));
+    }
+
+    @Test
+    void approveTransitionsLargeInvoiceToSecondApprovalWhenFirstApprovalIsRecorded() {
+        Invoice invoice = invoiceWith("INV-100", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
+
+        Invoice result = service.approve("INV-100", "demo.director", "Director");
+
+        assertEquals(InvoiceStatus.PendingSecondApproval, result.getStatus());
+        assertEquals("demo.director", result.getFirstApprover());
+        assertNull(result.getSecondApprover());
+    }
+
+    @Test
+    void secondApprovalRequiresDifferentUser() {
+        Invoice invoice = invoiceWith("INV-100", InvoiceStatus.PendingSecondApproval, BigDecimal.valueOf(500001));
+        invoice.setFirstApprover("demo.director");
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-100", "demo.director", "Director"));
+
+        assertEquals("The same user cannot approve the same high-value invoice twice.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
+    }
+
+    @Test
+    void secondApprovalRequiresDirectorRole() {
+        Invoice invoice = invoiceWith("INV-100", InvoiceStatus.PendingSecondApproval, BigDecimal.valueOf(500001));
+        invoice.setFirstApprover("demo.manager");
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-100", "demo.director", "Manager"));
+
+        assertEquals("The second approver for an invoice over 500000 must be a Director.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
+    }
+
+    @Test
+    void secondDirectorApprovalCompletesHighValueApproval() {
+        Invoice invoice = invoiceWith("INV-100", InvoiceStatus.PendingSecondApproval, BigDecimal.valueOf(500001));
+        invoice.setFirstApprover("demo.manager");
+        ApprovalService service = serviceFor(invoice);
+
+        Invoice result = service.approve("INV-100", "demo.director", "Director");
+
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertEquals("demo.director", result.getSecondApprover());
+        assertEquals("demo.manager", invoice.getFirstApprover());
+    }
+
+    @Test
+    void highValueInvoiceApprovesWithTwoDistinctDirectorApprovers() {
+        Invoice invoice = invoiceWith("INV-200", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
+
+        Invoice firstApproval = service.approve("INV-200", "demo.director", "Director");
+
+        assertEquals(InvoiceStatus.PendingSecondApproval, firstApproval.getStatus());
+        assertEquals("demo.director", firstApproval.getFirstApprover());
+        assertNull(firstApproval.getSecondApprover());
+
+        Invoice secondApproval = service.approve("INV-200", "demo.admin", "Director");
+
+        assertEquals(InvoiceStatus.Approved, secondApproval.getStatus());
+        assertEquals("demo.director", secondApproval.getFirstApprover());
+        assertEquals("demo.admin", secondApproval.getSecondApprover());
+        assertEquals(InvoiceStatus.Approved, invoice.getStatus());
+    }
+
+    @Test
+    void highValueInvoiceRequiresSecondApprovalBeforeCompletion() {
+        Invoice invoice = invoiceWith("INV-201", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
+
+        Invoice approval = service.approve("INV-201", "demo.director", "Director");
+
+        assertEquals(InvoiceStatus.PendingSecondApproval, approval.getStatus());
+        assertEquals("demo.director", approval.getFirstApprover());
+        assertNull(approval.getSecondApprover());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
+    }
+
+    @Test
+    void highValueInvoiceRejectsSameApproverUsedTwice() {
+        Invoice invoice = invoiceWith("INV-202", InvoiceStatus.PendingSecondApproval, BigDecimal.valueOf(500001));
+        invoice.setFirstApprover("demo.director");
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-202", "demo.director", "Director"));
+
+        assertEquals("The same user cannot approve the same high-value invoice twice.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
+        assertEquals("demo.director", invoice.getFirstApprover());
+        assertNull(invoice.getSecondApprover());
+    }
+
+    @Test
+    void highValueInvoiceRejectsDuplicateApprovalBySameUser() {
+        Invoice invoice = invoiceWith("INV-203", InvoiceStatus.Approved, BigDecimal.valueOf(500001));
+        invoice.setDecidedBy("demo.admin");
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> service.approve("INV-203", "demo.admin", "Director"));
+
+        assertTrue(ex.getMessage().contains("only pending invoices can be decided"));
+        assertEquals(InvoiceStatus.Approved, invoice.getStatus());
+        assertEquals("demo.admin", invoice.getDecidedBy());
+    }
+
+    @Test
+    void highValueInvoiceRejectsMissingSecondApproval() {
+        Invoice invoice = invoiceWith("INV-204", InvoiceStatus.PendingSecondApproval, BigDecimal.valueOf(500001));
+        invoice.setFirstApprover("demo.director");
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-204", "demo.manager", "Manager"));
+
+        assertEquals("The second approver for an invoice over 500000 must be a Director.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
+        assertEquals("demo.director", invoice.getFirstApprover());
+        assertNull(invoice.getSecondApprover());
+    }
+
+    @Test
+    void highValueInvoiceRejectsInvalidApprovalSequence() {
+        Invoice invoice = invoiceWith("INV-205", InvoiceStatus.Approved, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> service.approve("INV-205", "demo.director", "Director"));
+
+        assertTrue(ex.getMessage().contains("only pending invoices can be decided"));
+        assertEquals(InvoiceStatus.Approved, invoice.getStatus());
+        assertNull(invoice.getFirstApprover());
+        assertNull(invoice.getSecondApprover());
+    }
+
+    @Test
+    void highValueInvoiceRejectsApprovalAmountExceedingRoleAuthority() {
+        Invoice invoice = invoiceWith("INV-206", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-206", "demo.manager", "Manager"));
+
+        assertEquals("The first approver for an invoice over 500000 must be a Director.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
+        assertNull(invoice.getFirstApprover());
+        assertNull(invoice.getSecondApprover());
     }
 }
