@@ -27,6 +27,10 @@ public class Invoice {
     private Instant decidedAt;
     private String decisionNote;
 
+    private String firstApprover;
+    private String secondApprover;
+    private String approvalReason;
+
     public Invoice() {
     }
 
@@ -51,5 +55,10 @@ public class Invoice {
     public void setDecidedAt(Instant decidedAt) { this.decidedAt = decidedAt; }
     public String getDecisionNote() { return decisionNote; }
     public void setDecisionNote(String decisionNote) { this.decisionNote = decisionNote; }
+    public String getFirstApprover() { return firstApprover; }
+    public void setFirstApprover(String firstApprover) { this.firstApprover = firstApprover; }
+    public String getSecondApprover() { return secondApprover; }
+    public void setSecondApprover(String secondApprover) { this.secondApprover = secondApprover; }
+    public String getApprovalReason() { return approvalReason; }
+    public void setApprovalReason(String approvalReason) { this.approvalReason = approvalReason; }
 }
-

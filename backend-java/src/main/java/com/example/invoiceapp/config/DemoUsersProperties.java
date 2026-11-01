@@ -1,19 +1,24 @@
 package com.example.invoiceapp.config;
 
-import org.springframework.context.annotation.Bean;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
+@ConfigurationProperties(prefix = "app")
 public class DemoUsersProperties {
-    private final List<DemoUser> users = new ArrayList<>(List.of(
+    private List<DemoUser> users = new ArrayList<>(List.of(
+            new DemoUser("demo.manager", "ChangeMe123!", "Manager"),
+            new DemoUser("demo.director", "ChangeMe123!", "Director"),
+            new DemoUser("demo.director2", "ChangeMe123!", "Director"),
             new DemoUser("demo.approver", "ChangeMe123!", "Approver"),
             new DemoUser("demo.admin", "ChangeMe123!", "Admin")
     ));
 
     public List<DemoUser> getUsers() { return users; }
+    public void setUsers(List<DemoUser> users) { this.users = users == null ? new ArrayList<>() : users; }
 
     public static class DemoUser {
         private String username;
