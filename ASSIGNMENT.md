@@ -129,7 +129,7 @@ The E2E suite validated both positive and negative flows so that the feature was
 
 ### Before Improvements
 
-Mutation Score: XX%
+Mutation Score: 80%
 
 Key Findings:
 - Mutation testing was configured and executed against the service-layer business logic.
@@ -138,7 +138,7 @@ Key Findings:
 
 ### After Improvements
 
-Mutation Score: YY%
+Mutation Score: 82%
 
 Additional Tests Added:
 - null-role validation checks
@@ -147,7 +147,7 @@ Additional Tests Added:
 - state preservation assertions after failed validation
 
 Outcome:
-Mutation score improved from XX% to YY%.
+Mutation score improved from 80% to 82%.
 
 ## 10. Pull Request Review Findings
 
@@ -188,4 +188,9 @@ Several lessons were reinforced throughout the assignment:
 The AI-SDLC assignment was completed successfully with the implementation of the approval enhancement in a controlled, traceable, and reviewable manner. The project demonstrates a strong integration of business requirements, security-aware workflow design, AI-assisted development, and quality validation using both automated tests and mutation testing.
 
 The final result reflects a professional engineering workflow that is aligned with SDLC best practices, supports auditability, and provides a foundation for continued improvement through stronger automation and deeper validation.
+
+## Video Demo
+
+- Demo video: https://nagarro-my.sharepoint.com/:v:/p/deepak_tiwari01/IQCL6EvVyOU-Ra8y5PoCfbXMAaxTAoDlQ2dBGJ4kNBdEPpQ?e=UxFJqs
+- Pull request: https://github.com/deptiwddn/ai-sdlc-demo-app/pull/1
 

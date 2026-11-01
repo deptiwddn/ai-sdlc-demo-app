@@ -1,6 +1,6 @@
 # Invoice Approval Demo App
 
-A small invoice approval app used for live AI-in-SDLC demos. It is implemented as a Java Spring Boot application with an in-memory H2 database and a plain web UI.
+A Spring Boot invoice approval application used for live AI-in-SDLC demos. It includes a Java backend, an in-memory H2 database, and a lightweight web UI that follows Angular-style interaction patterns. The current project includes the approval enhancement workflow, role-based permissions, Playwright validation, and mutation testing support.
 
 ## Quick start
 
@@ -18,6 +18,9 @@ Sign in with one of the demo accounts below:
 | User | Password | Role |
 | --- | --- | --- |
 | `demo.approver` | `ChangeMe123!` | Approver |
+| `demo.manager` | `ChangeMe123!` | Manager |
+| `demo.director` | `ChangeMe123!` | Director |
+| `demo.director2` | `ChangeMe123!` | Director |
 | `demo.admin` | `ChangeMe123!` | Admin |
 
 These are demo accounts for the local app only; they are not real credentials.
@@ -26,16 +29,30 @@ These are demo accounts for the local app only; they are not real credentials.
 
 1. Create an invoice. It starts in Draft.
 2. Submit it for approval.
-3. An approver or admin approves or rejects it with a reason.
+3. A role-appropriate user approves or rejects it with a reason.
+4. High-value invoices above 500,000 require a second Director approval from a different user.
+5. Invalid approval attempts do not mutate the invoice state.
 
-Invoices move through Draft, PendingApproval, then Approved or Rejected.
+Invoice flow includes Draft, PendingApproval, PendingSecondApproval, Approved, and Rejected.
+
+## Approval workflow
+
+The current business rules implemented are:
+
+- Manager approval limit: up to 50,000
+- Director approval limit: up to 500,000
+- Invoice above 500,000 requires two Director approvals
+- The second approver must be a different user
+- Duplicate approvals by the same user are rejected
+- Rejections require a reason and preserve the invoice state when invalid
 
 ## App behavior and security
 
 - Every API endpoint is behind sign-in.
 - Destructive actions require the Admin role.
-- Approval actions require the Approver or Admin role.
-- Business logic is kept in the Java service layer, not in controllers or configuration.
+- Approval actions are enforced in the Java service layer, not in the controller or UI.
+- Approval logic is protected by role and workflow validation in the backend.
+- Frontend behavior aligns with the backend business rules.
 
 ## Tests
 
@@ -46,24 +63,61 @@ cd backend-java
 mvn test
 ```
 
+Run the Playwright end-to-end suite:
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium
+npx playwright test
+```
+
+Run PIT mutation coverage:
+
+```bash
+cd backend-java
+mvn org.pitest:pitest-maven:mutationCoverage
+```
+
 ## Project layout
 
 ```text
 backend-java/
-  src/main/java/       Spring Boot app code
-  src/main/resources/  app config and static web assets
+  src/main/java/       Spring Boot app code and business rules
+  src/main/resources/  app config, static web assets, seed data
   src/test/java/       Java tests
   pom.xml              Maven build configuration
 
-Docs and demo artifacts are also kept in the repository root.
+e2e/
+  tests/               Playwright end-to-end tests
+  pages/               page objects for browser flows
+
+openspec/
+  changes/             OpenSpec requirement and task artifacts
+
+docs/
+  ai-interactions.md   AI activity logging
+  implementation-plan.md
+  risk-assessment.md
+  pr-review-findings.md
+  mutation-testing-before.md
+  mutation-testing-after.md
 ```
 
-## Use cases
+## AI-assisted SDLC workflow
 
-- [UC-1 Bulk invoice approval](docs/use-cases/UC-1-bulk-approval.md)
-- [UC-2 Partial approval](docs/use-cases/UC-2-partial-approval.md)
+This repository demonstrates a spec-driven, AI-assisted SDLC workflow using:
+
+- GitHub Copilot
+- OpenSpec
+- Spring Boot
+- Playwright
+- PIT mutation testing
+
+The workflow includes requirement specification, implementation planning, development, testing, review, and audit logging.
 
 ## Notes
 
 - Do not commit real credentials, tokens, or customer data.
 - Keep business logic in the service layer and out of the controller layer.
+- Maintain traceability from requirements through implementation, tests, and review evidence.
