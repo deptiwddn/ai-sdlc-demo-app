@@ -191,6 +191,6 @@ The final result reflects a professional engineering workflow that is aligned wi
 
 ## Video Demo
 
-- Demo video: https://nagarro-my.sharepoint.com/:v:/p/deepak_tiwari01/IQCL6EvVyOU-Ra8y5PoCfbXMAaxTAoDlQ2dBGJ4kNBdEPpQ?e=UxFJqs
+- Demo video: https://nagarro-my.sharepoint.com/:v:/p/deepak_tiwari01/IQCL6EvVyOU-Ra8y5PoCfbXMAaxTAoDlQ2dBGJ4kNBdEPpQ?e=ggh65l
 - Pull request: https://github.com/deptiwddn/ai-sdlc-demo-app/pull/1
 
