@@ -334,4 +334,64 @@ class ApprovalServiceTests {
         assertNull(invoice.getFirstApprover());
         assertNull(invoice.getSecondApprover());
     }
+
+    @Test
+    void approveRejectsNullRole() {
+        Invoice invoice = invoiceWith("INV-NULL-ROLE", InvoiceStatus.PendingApproval, BigDecimal.valueOf(1500));
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-NULL-ROLE", "demo.manager", null));
+
+        assertEquals("A valid approval role is required.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
+        assertNull(invoice.getDecidedBy());
+    }
+
+    @Test
+    void rejectAllowsNullRoleWhenReasonIsProvided() {
+        Invoice invoice = invoiceWith("INV-NULL-ROLE-REJECT", InvoiceStatus.PendingApproval, BigDecimal.valueOf(1500));
+        ApprovalService service = serviceFor(invoice);
+
+        Invoice result = service.reject("INV-NULL-ROLE-REJECT", "demo.approver", null, "Duplicate invoice");
+
+        assertEquals(InvoiceStatus.Rejected, result.getStatus());
+        assertEquals("Duplicate invoice", result.getDecisionNote());
+    }
+
+    @Test
+    void approveAllowsNullApproverForRegularApproval() {
+        ApprovalService service = serviceFor(invoiceWith("INV-NULL-APPROVER", InvoiceStatus.PendingApproval, BigDecimal.valueOf(1500)));
+
+        Invoice result = service.approve("INV-NULL-APPROVER", null, "Manager");
+
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertNull(result.getDecidedBy());
+    }
+
+    @Test
+    void secondApprovalRejectsNullRoleBeforeApplyingDecisionLogic() {
+        Invoice invoice = invoiceWith("INV-NULL-SECOND-ROLE", InvoiceStatus.PendingSecondApproval, BigDecimal.valueOf(500001));
+        invoice.setFirstApprover("demo.director");
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-NULL-SECOND-ROLE", "demo.director", null));
+
+        assertEquals("A valid approval role is required.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingSecondApproval, invoice.getStatus());
+        assertEquals("demo.director", invoice.getFirstApprover());
+    }
+
+    @Test
+    void rejectRequiresReasonEvenWhenRoleIsNull() {
+        Invoice invoice = invoiceWith("INV-REJECT-NULL-ROLE", InvoiceStatus.PendingApproval, BigDecimal.valueOf(2500));
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.reject("INV-REJECT-NULL-ROLE", "demo.approver", null, "   "));
+
+        assertEquals("A reason is required to reject an invoice.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
+    }
 }
