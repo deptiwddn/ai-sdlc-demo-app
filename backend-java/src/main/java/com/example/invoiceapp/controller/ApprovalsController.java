@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/approvals")
-@RequireRole({"Approver", "Admin"})
+@RequireRole({"Approver", "Manager", "Director", "Admin"})
 public class ApprovalsController extends ApiControllerBase {
     private final ApprovalService approvals;
 
@@ -21,7 +21,7 @@ public class ApprovalsController extends ApiControllerBase {
     @PostMapping("/{invoiceId}/approve")
     public ResponseEntity<?> approve(@PathVariable String invoiceId, HttpServletRequest request) {
         UserSession session = (UserSession) request.getAttribute("session");
-        return handle(() -> approvals.approve(invoiceId, session.username()));
+        return handle(() -> approvals.approve(invoiceId, session.username(), session.role()));
     }
 
     @PostMapping("/{invoiceId}/reject")
@@ -33,4 +33,3 @@ public class ApprovalsController extends ApiControllerBase {
     public record RejectRequest(String reason) {
     }
 }
-

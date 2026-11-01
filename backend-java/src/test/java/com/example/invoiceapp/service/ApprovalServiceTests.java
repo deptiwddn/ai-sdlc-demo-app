@@ -5,6 +5,7 @@ import com.example.invoiceapp.model.InvoiceStatus;
 import com.example.invoiceapp.repository.InvoiceRepository;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -16,11 +17,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class ApprovalServiceTests {
-    private static Invoice invoiceWith(String id, InvoiceStatus status) {
+    private static Invoice invoiceWith(String id, InvoiceStatus status, BigDecimal amount) {
         Invoice invoice = new Invoice();
         invoice.setId(id);
         invoice.setCustomerName("Test School");
-        invoice.setAmount(java.math.BigDecimal.valueOf(100));
+        invoice.setAmount(amount);
         invoice.setStatus(status);
         return invoice;
     }
@@ -44,7 +45,7 @@ class ApprovalServiceTests {
 
     @Test
     void submitMovesDraftToPendingApproval() {
-        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.Draft);
+        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.Draft, BigDecimal.valueOf(100));
 
         Invoice result = serviceFor(invoice).submit("INV-1");
 
@@ -53,39 +54,129 @@ class ApprovalServiceTests {
 
     @Test
     void submitRejectsInvoiceThatIsNotADraft() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.Approved));
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.Approved, BigDecimal.valueOf(100)));
 
         assertThrows(IllegalStateException.class, () -> service.submit("INV-1"));
     }
 
     @Test
     void approveSetsStatusApproverAndTimestamp() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval));
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(100)));
 
-        Invoice result = service.approve("INV-1", "demo.approver");
+        Invoice result = service.approve("INV-1", "demo.manager", "Manager");
 
         assertEquals(InvoiceStatus.Approved, result.getStatus());
-        assertEquals("demo.approver", result.getDecidedBy());
+        assertEquals("demo.manager", result.getDecidedBy());
         assertNotNull(result.getDecidedAt());
     }
 
     @Test
-    void approveRejectsInvoiceThatIsStillADraft() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.Draft));
+    void managerApprovalRejectsInvoiceAboveLimit() {
+        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(50001));
+        ApprovalService service = serviceFor(invoice);
 
-        assertThrows(IllegalStateException.class, () -> service.approve("INV-1", "demo.approver"));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-1", "demo.manager", "Manager"));
+
+        assertTrue(ex.getMessage().contains("Manager approval limit exceeded"));
+        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
+    }
+
+    @Test
+    void managerApprovalAllowsAmountWithinLimit() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(49999)));
+
+        Invoice result = service.approve("INV-1", "demo.manager", "Manager");
+
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertEquals("demo.manager", result.getDecidedBy());
+    }
+
+    @Test
+    void managerApprovalAllowsAmountAtLimit() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(50000)));
+
+        Invoice result = service.approve("INV-1", "demo.manager", "Manager");
+
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertEquals("demo.manager", result.getDecidedBy());
+    }
+
+    @Test
+    void managerApprovalRejectsAmountAboveLimitWithoutMutatingState() {
+        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(50001));
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-1", "demo.manager", "Manager"));
+
+        assertEquals("Manager approval limit exceeded: invoice amount 50001 exceeds the maximum of 50000.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
+        assertNull(invoice.getDecidedBy());
+        assertNull(invoice.getDecidedAt());
+    }
+
+    @Test
+    void directorApprovalRejectsInvoiceAboveLimit() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001)));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-1", "demo.director", "Director"));
+
+        assertTrue(ex.getMessage().contains("Director approval limit exceeded"));
+    }
+
+    @Test
+    void directorApprovalAllowsAmountWithinLimit() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(499999)));
+
+        Invoice result = service.approve("INV-1", "demo.director", "Director");
+
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertEquals("demo.director", result.getDecidedBy());
+    }
+
+    @Test
+    void directorApprovalAllowsAmountAtLimit() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500000)));
+
+        Invoice result = service.approve("INV-1", "demo.director", "Director");
+
+        assertEquals(InvoiceStatus.Approved, result.getStatus());
+        assertEquals("demo.director", result.getDecidedBy());
+    }
+
+    @Test
+    void directorApprovalRejectsAmountAboveLimitWithoutMutatingState() {
+        Invoice invoice = invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(500001));
+        ApprovalService service = serviceFor(invoice);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.approve("INV-1", "demo.director", "Director"));
+
+        assertEquals("Director approval limit exceeded: invoice amount 500001 exceeds the maximum of 500000.", ex.getMessage());
+        assertEquals(InvoiceStatus.PendingApproval, invoice.getStatus());
+        assertNull(invoice.getDecidedBy());
+        assertNull(invoice.getDecidedAt());
+    }
+
+    @Test
+    void approveRejectsInvoiceThatIsStillADraft() {
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.Draft, BigDecimal.valueOf(100)));
+
+        assertThrows(IllegalStateException.class, () -> service.approve("INV-1", "demo.approver", "Approver"));
     }
 
     @Test
     void approveThrowsWhenInvoiceDoesNotExist() {
         ApprovalService service = serviceFor();
 
-        assertThrows(IllegalArgumentException.class, () -> service.approve("INV-404", "demo.approver"));
+        assertThrows(IllegalArgumentException.class, () -> service.approve("INV-404", "demo.approver", "Approver"));
     }
 
     @Test
     void rejectRecordsReasonAndApprover() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval));
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(100)));
 
         Invoice result = service.reject("INV-1", "demo.approver", "Duplicate invoice");
 
@@ -95,7 +186,7 @@ class ApprovalServiceTests {
 
     @Test
     void rejectRequiresAReason() {
-        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval));
+        ApprovalService service = serviceFor(invoiceWith("INV-1", InvoiceStatus.PendingApproval, BigDecimal.valueOf(100)));
 
         assertThrows(IllegalArgumentException.class, () -> service.reject("INV-1", "demo.approver", "  "));
     }

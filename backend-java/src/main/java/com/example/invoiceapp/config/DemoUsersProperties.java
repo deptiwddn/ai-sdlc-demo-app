@@ -9,6 +9,8 @@ import java.util.List;
 @Configuration
 public class DemoUsersProperties {
     private final List<DemoUser> users = new ArrayList<>(List.of(
+            new DemoUser("demo.manager", "ChangeMe123!", "Manager"),
+            new DemoUser("demo.director", "ChangeMe123!", "Director"),
             new DemoUser("demo.approver", "ChangeMe123!", "Approver"),
             new DemoUser("demo.admin", "ChangeMe123!", "Admin")
     ));

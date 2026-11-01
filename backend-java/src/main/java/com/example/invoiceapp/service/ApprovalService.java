@@ -6,6 +6,7 @@ import com.example.invoiceapp.repository.InvoiceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Service
@@ -27,9 +28,10 @@ public class ApprovalService {
         return repository.save(invoice);
     }
 
-    public Invoice approve(String invoiceId, String approver) {
+    public Invoice approve(String invoiceId, String approver, String role) {
         Invoice invoice = find(invoiceId);
         ensurePending(invoice);
+        validateApprovalLimit(invoice, approver, role);
 
         invoice.setStatus(InvoiceStatus.Approved);
         invoice.setDecidedBy(approver);
@@ -55,6 +57,21 @@ public class ApprovalService {
     private Invoice find(String invoiceId) {
         return repository.findById(invoiceId)
                 .orElseThrow(() -> new IllegalArgumentException("Invoice " + invoiceId + " was not found."));
+    }
+
+    private void validateApprovalLimit(Invoice invoice, String approver, String role) {
+        if (role == null || role.isBlank()) {
+            return;
+        }
+
+        BigDecimal amount = invoice.getAmount();
+        if ("Manager".equals(role) && amount.compareTo(BigDecimal.valueOf(50000)) > 0) {
+            throw new IllegalArgumentException("Manager approval limit exceeded: invoice amount " + amount + " exceeds the maximum of 50000.");
+        }
+
+        if ("Director".equals(role) && amount.compareTo(BigDecimal.valueOf(500000)) > 0) {
+            throw new IllegalArgumentException("Director approval limit exceeded: invoice amount " + amount + " exceeds the maximum of 500000.");
+        }
     }
 
     private static void ensurePending(Invoice invoice) {
